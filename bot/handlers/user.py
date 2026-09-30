@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import logging
 import html
 import re
@@ -34,11 +34,23 @@ class AadhaarStates(StatesGroup):
 @router.message(CommandStart())
 async def cmd_start(message: Message, session: AsyncSession, bot: Bot):
     user_service = UserService(session)
+    referrer_id = None
+    parts = (message.text or "").split()
+    if len(parts) > 1:
+        raw_ref = parts[1].strip()
+        if raw_ref.startswith("ref_"):
+            raw_ref = raw_ref[4:]
+        if raw_ref.isdigit():
+            parsed_ref = int(raw_ref)
+            if parsed_ref != message.from_user.id:
+                referrer_id = parsed_ref
+
     user = await user_service.get_or_create_user(
         telegram_id=message.from_user.id,
         username=message.from_user.username,
         first_name=message.from_user.first_name,
-        last_name=message.from_user.last_name
+        last_name=message.from_user.last_name,
+        referred_by=referrer_id
     )
 
     is_admin = message.from_user.id in config.admin_ids
@@ -272,17 +284,13 @@ async def process_name_input(message: Message, session: AsyncSession, state: FSM
 
 # ── Dynamic Captcha & OTP Message Interceptor ────────────────────────────────
 
-@router.message(F.text)
-async def intercept_captcha_or_otp(message: Message, state: FSMContext):
-    # If the automation engine is actively waiting for Captcha or OTP input from this chat
-    if AadhaarService.is_user_waiting_input(message.from_user.id):
-        AadhaarService.submit_user_input(message.from_user.id, message.text)
-        return
+def _is_aadhaar_input_active(message: Message) -> bool:
+    uid = message.from_user.id if message.from_user else 0
+    return AadhaarService.is_user_waiting_input(uid) or AadhaarService.is_task_active(uid)
 
-    # Or if a task is running, buffer the input
-    if AadhaarService.is_task_active(message.from_user.id):
-        AadhaarService.submit_user_input(message.from_user.id, message.text)
-        return
+@router.message(F.text, _is_aadhaar_input_active)
+async def intercept_captcha_or_otp(message: Message, state: FSMContext):
+    AadhaarService.submit_user_input(message.from_user.id, message.text)
 
 # ── Recharge & Seller Handlers ───────────────────────────────────────────────
 

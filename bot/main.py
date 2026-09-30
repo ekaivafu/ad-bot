@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import logging
 import os
 import sys
@@ -68,9 +68,9 @@ async def main():
     dp.callback_query.middleware(ForceSubMiddleware())
     dp.message.middleware(DailyBonusMiddleware())
 
-    # 4. Register Routers
-    dp.include_router(user.router)
+    # 4. Register Routers (admin first so admin commands/FSM take precedence)
     dp.include_router(admin.router)
+    dp.include_router(user.router)
 
     # 5. Initialize Neon Postgres Database (schema auto-creation & plan seeding)
     await init_db()

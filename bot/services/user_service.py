@@ -143,6 +143,38 @@ class UserService:
 
         return user
 
+    async def get_or_create_user(
+        self,
+        telegram_id: int,
+        username: Optional[str] = None,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None,
+        referred_by: Optional[int] = None
+    ) -> User:
+        user = await self.get_user_by_telegram_id(telegram_id)
+        if user:
+            updated = False
+            if username is not None and user.username != username:
+                user.username = username
+                updated = True
+            if first_name is not None and user.first_name != first_name:
+                user.first_name = first_name
+                updated = True
+            if last_name is not None and user.last_name != last_name:
+                user.last_name = last_name
+                updated = True
+            if updated:
+                await self.session.flush()
+            return user
+
+        return await self.create_user(
+            telegram_id=telegram_id,
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
+            referred_by=referred_by
+        )
+
     async def process_referral_reward(self, bot: Bot, new_user: User) -> Tuple[bool, str]:
         """
         Validates and awards referral bonus to the inviter when a referred user joins
@@ -413,6 +445,18 @@ class UserService:
         await self.session.flush()
         setattr(req, "is_updated", False)
         return req
+
+    async def create_recharge_request(
+        self,
+        telegram_id: int,
+        amount: int,
+        plan_id: Optional[int] = None
+    ) -> Optional[RechargeRequest]:
+        return await self.request_recharge(
+            telegram_id=telegram_id,
+            amount=amount,
+            plan_id=plan_id
+        )
     
     async def get_pending_recharges(self) -> List[Tuple[RechargeRequest, Optional[User], Optional[Plan]]]:
         """Fetch all pending recharge requests along with User and Plan info ordered by requested_at."""
