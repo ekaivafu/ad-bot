@@ -1,13 +1,12 @@
-﻿import os
+import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from typing import List
 
 class Settings(BaseSettings):
-    # Support both BOT_TOKEN and TELEGRAM_BOT_TOKEN
     bot_token_raw: str = Field("", validation_alias="BOT_TOKEN")
     telegram_bot_token_raw: str = Field("", validation_alias="TELEGRAM_BOT_TOKEN")
-    database_url: str = Field("", validation_alias="DATABASE_URL")
+    database_url_raw: str = Field("", validation_alias="DATABASE_URL")
     admin_telegram_ids: str = Field("", validation_alias="ADMIN_TELEGRAM_IDS")
     admin_ids_raw: str = Field("", validation_alias="ADMIN_IDS")
     developer_username: str = Field("tgekaiva", validation_alias="DEVELOPER_USERNAME")
@@ -24,6 +23,28 @@ class Settings(BaseSettings):
             or os.environ.get("BOT_TOKEN", "")
             or os.environ.get("TELEGRAM_BOT_TOKEN", "")
         )
+
+    @property
+    def database_url(self) -> str:
+        url = (
+            self.database_url_raw
+            or os.environ.get("DATABASE_URL", "")
+        ).strip()
+        if not url:
+            return ""
+        if url.startswith("postgres://"):
+            url = "postgresql+asyncpg://" + url[11:]
+        elif url.startswith("postgresql://"):
+            url = "postgresql+asyncpg://" + url[13:]
+        if "sslmode=require" in url:
+            url = url.replace("sslmode=require", "ssl=require")
+        if "&channel_binding=require" in url:
+            url = url.replace("&channel_binding=require", "")
+        if "?channel_binding=require&" in url:
+            url = url.replace("channel_binding=require&", "")
+        elif "?channel_binding=require" in url:
+            url = url.replace("?channel_binding=require", "")
+        return url
 
     @property
     def admin_ids(self) -> List[int]:
