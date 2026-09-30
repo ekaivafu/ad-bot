@@ -182,10 +182,9 @@ class AadhaarService:
         Executes the Aadhaar engine workflow asynchronously.
         Returns True on success, False on failure.
         """
-        adapter = AiogramBotAdapter(bot, asyncio.get_running_loop())
         try:
             res = await aadhaar_engine.execute_task(
-                adapter,
+                bot,
                 chat_id=chat_id,
                 name=name,
                 mobile=mobile,

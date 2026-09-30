@@ -1,3 +1,4 @@
+from aiogram.types import FSInputFile
 import asyncio
 import os
 import re
@@ -125,35 +126,60 @@ class AadhaarEngine:
         self._preloader_task = None
         self.temp_msg_ids = []
 
-    def update_status(self, text):
+    async def update_status(self, text):
         """Updates a single live status message dynamically to avoid spamming the chat."""
         if not self.chat_id or self.chat_id == "master":
             return
         footer = f"\n━━━━━━━━━━━━━━━━━━━━━━\n<i>Dev: @{DEVELOPER_USERNAME}</i>"
+        full_text = f"{text}{footer}"
         if self.status_msg_id:
             try:
-                self.bot.edit_message_text(chat_id=self.chat_id, message_id=self.status_msg_id, text=f"{text}{footer}", parse_mode='HTML')
-            except: pass
+                await self.bot.edit_message_text(
+                    chat_id=int(self.chat_id),
+                    message_id=self.status_msg_id,
+                    text=full_text,
+                    parse_mode='HTML',
+                    disable_web_page_preview=True
+                )
+            except Exception:
+                try:
+                    msg = await self.bot.send_message(
+                        chat_id=int(self.chat_id),
+                        text=full_text,
+                        parse_mode='HTML',
+                        disable_web_page_preview=True
+                    )
+                    self.status_msg_id = msg.message_id
+                except Exception:
+                    pass
         else:
             try:
-                msg = self.bot.send_message(self.chat_id, f"{text}{footer}", parse_mode='HTML')
+                msg = await self.bot.send_message(
+                    chat_id=int(self.chat_id),
+                    text=full_text,
+                    parse_mode='HTML',
+                    disable_web_page_preview=True
+                )
                 self.status_msg_id = msg.message_id
                 try:
                     if int(self.chat_id) < 0:
                         self.temp_msg_ids.append(self.status_msg_id)
-                except: pass
-            except: pass
+                except Exception:
+                    pass
+            except Exception:
+                pass
 
-    def refresh_status_card(self, text):
+    async def refresh_status_card(self, text):
         """Deletes the old status message and spawns a new one at the very bottom of the chat."""
         if not self.chat_id or self.chat_id == "master":
             return
         if self.status_msg_id:
             try:
-                self.bot.delete_message(chat_id=self.chat_id, message_id=self.status_msg_id)
-            except: pass
+                await self.bot.delete_message(chat_id=int(self.chat_id), message_id=self.status_msg_id)
+            except Exception:
+                pass
             self.status_msg_id = None
-        self.update_status(text)
+        await self.update_status(text)
 
     def start_preloader(self, base_text):
         """Starts a background task that animates a satisfying preloader under the status message."""
@@ -161,9 +187,10 @@ class AadhaarEngine:
         self._preloader_active = True
         self.preloader_base_text = base_text
         
-        # Always use the global _running_loop to avoid wrong-loop errors with multiple users
-        global _running_loop
-        target_loop = _running_loop or asyncio.get_event_loop()
+        try:
+            target_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            target_loop = asyncio.get_event_loop()
         self._preloader_task = target_loop.create_task(self._preloader_loop())
 
     def stop_preloader(self):
@@ -210,15 +237,29 @@ class AadhaarEngine:
                 full_text = f"{base_text}\n━━━━━━━━━━━━━━━━━━━━━━\n{spin} <b>{bar}</b>"
                 footer = f"\n━━━━━━━━━━━━━━━━━━━━━━\n<i>Dev: @{DEVELOPER_USERNAME}</i>"
                 
+                combined = f"{full_text}{footer}"
                 if self.status_msg_id:
                     try:
-                        self.bot.edit_message_text(
-                            chat_id=self.chat_id,
+                        await self.bot.edit_message_text(
+                            chat_id=int(self.chat_id),
                             message_id=self.status_msg_id,
-                            text=f"{full_text}{footer}",
-                            parse_mode='HTML'
+                            text=combined,
+                            parse_mode='HTML',
+                            disable_web_page_preview=True
                         )
-                    except: pass
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        msg = await self.bot.send_message(
+                            chat_id=int(self.chat_id),
+                            text=combined,
+                            parse_mode='HTML',
+                            disable_web_page_preview=True
+                        )
+                        self.status_msg_id = msg.message_id
+                    except Exception:
+                        pass
                 
                 idx += 1
                 await asyncio.sleep(1.2)  # Safe sleep interval for Telegram limits
@@ -271,7 +312,7 @@ class AadhaarEngine:
             print(f"🧹 [CLEANUP] Deleting {len(self.temp_msg_ids)} intermediate messages in group {self.chat_id}...")
             for msg_id in list(self.temp_msg_ids):
                 try:
-                    self.bot.delete_message(chat_id=chat_id_int, message_id=msg_id)
+                    await self.bot.delete_message(chat_id=chat_id_int, message_id=msg_id)
                 except Exception as e:
                     print(f"⚠️ [CLEANUP] Failed to delete message {msg_id}: {e}")
             self.temp_msg_ids.clear()
@@ -287,11 +328,11 @@ class AadhaarEngine:
         self.phase1_ready = asyncio.Event()
         self.phase1_mobile = mobile
         
-        global _running_loop
-        if _running_loop:
-            self.phase1_task = _running_loop.create_task(self._early_phase1_loop(mobile))
-        else:
-            print("⚠️ [PRE-WARM] Global event loop not set. Cannot spawn Phase 1 early.")
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.get_event_loop()
+        self.phase1_task = loop.create_task(self._early_phase1_loop(mobile))
 
     async def _early_phase1_loop(self, mobile):
         try:
@@ -382,7 +423,7 @@ class AadhaarEngine:
         captured_real_name = name # Fallback to input name
         try:
             if use_prewarmed:
-                self.update_status("🔍 <b>PHASE 1: Retrieving ID...</b>\n⚡ <i>Using pre-warmed EID retrieval browser...</i>")
+                await self.update_status("🔍 <b>PHASE 1: Retrieving ID...</b>\n⚡ <i>Using pre-warmed EID retrieval browser...</i>")
                 try:
                     # Wait up to 15 seconds for the prewarm process to be ready
                     await asyncio.wait_for(self.phase1_ready.wait(), timeout=15.0)
@@ -428,16 +469,16 @@ class AadhaarEngine:
 
                 # Detect navigation retries and update status
                 if "Navigation attempt" in line:
-                    self.update_status(f"⚠️ <b>Portal response slow!</b> {escape_html(line)}. Kripya wait karein...")
+                    await self.update_status(f"⚠️ <b>Portal response slow!</b> {escape_html(line)}. Kripya wait karein...")
 
                 # Experiencing Technical Difficulties / Rate Limit detection
                 if "LIMIT CROSSED" in line:
-                    self.update_status("🛑 <b>LIMIT CROSSED!</b> Server has rate-limited this number or is experiencing overload. Please try again later.")
+                    await self.update_status("🛑 <b>LIMIT CROSSED!</b> Server has rate-limited this number or is experiencing overload. Please try again later.")
                     raise Exception("Technical difficulties / Rate limit reached. Limit crossed, try again later.")
                 
                 # Network Timeout detection
                 if "NETWORK ERROR" in line:
-                    self.update_status("🛑 <b>NETWORK ERROR!</b> Internet connection is extremely slow or gateway server is down. Please try again.")
+                    await self.update_status("🛑 <b>NETWORK ERROR!</b> Internet connection is extremely slow or gateway server is down. Please try again.")
                     raise Exception("Network issue / slow portal response.")
                 
                 # Successful OTP Triggered notification
@@ -449,7 +490,7 @@ class AadhaarEngine:
                         description="🚀 <b>OTP 1 Sent Successfully!</b>\n👇 Kripya niche chat me <b>OTP</b> type karein:",
                         target=mobile
                     )
-                    self.refresh_status_card(otp1_card)
+                    await self.refresh_status_card(otp1_card)
                 
                 # Manual Captcha interceptor
                 if line.startswith("🔑 MANUAL CAPTCHA REQUIRED |"):
@@ -462,16 +503,17 @@ class AadhaarEngine:
                         f_cap.write(base64.b64decode(b64_img.encode()))
                         
                     # Send image to Telegram user
-                    with open(temp_captcha_path, "rb") as f_photo:
-                        photo_msg = self.bot.send_photo(
-                            chat_id, f_photo, 
+                    try:
+                        photo_msg = await self.bot.send_photo(
+                            chat_id=int(chat_id),
+                            photo=FSInputFile(temp_captcha_path),
                             caption="⚠️ <b>Auto-Captcha solve failed!</b>\n👇 Kripya image me dikh raha captcha code manually type karein:",
                             parse_mode='HTML'
                         )
-                        try:
-                            if photo_msg and int(chat_id) < 0:
-                                self.temp_msg_ids.append(photo_msg.message_id)
-                        except: pass
+                        if photo_msg:
+                            self.temp_msg_ids.append(photo_msg.message_id)
+                    except Exception as e_p:
+                        print(f"⚠️ Failed to send captcha photo: {e_p}")
                     
                     # Wait for user input
                     user_captcha_val = await self.wait_for_input(chat_id, 'CAPTCHA')
@@ -489,7 +531,7 @@ class AadhaarEngine:
                 # Prompt the Telegram user for OTP input and feed it to stdin
                 if "ENTER THE OTP RECEIVED ON YOUR REGISTERED MOBILE" in line:
                     res_otp = await self.wait_for_input(chat_id, 'OTP')
-                    self.refresh_status_card(f"📱 <b>STEP 3/4: OTP 1 Verification</b>\n\n⏳ <b>Submitting OTP 1...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
+                    await self.refresh_status_card(f"📱 <b>STEP 3/4: OTP 1 Verification</b>\n\n⏳ <b>Submitting OTP 1...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
                     self.start_preloader(f"📱 <b>STEP 3/4: OTP 1 Verification</b>\n\n⏳ <b>Submitting OTP 1...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
                     process.stdin.write(f"{res_otp}\n".encode())
                     await process.stdin.drain()
@@ -567,7 +609,7 @@ class AadhaarEngine:
                     # Decoded Captcha / Captcha Solve status
                     if "Decoded Captcha:" in line:
                         solved_cap = line.split("Decoded Captcha:")[1].strip()
-                        self.update_status(f"🧩 <b>Captcha Solved:</b> <code>{solved_cap}</code>. Requesting OTP...")
+                        await self.update_status(f"🧩 <b>Captcha Solved:</b> <code>{solved_cap}</code>. Requesting OTP...")
                     
                     # Successful OTP Triggered notification
                     if "✅ OTP Sent Successfully!" in line:
@@ -578,7 +620,7 @@ class AadhaarEngine:
                             description="✅ <b>OTP 2 Sent Successfully!</b>\n👇 Kripya niche chat me <b>OTP</b> type karein:",
                             target=mobile
                         )
-                        self.refresh_status_card(otp2_card)
+                        await self.refresh_status_card(otp2_card)
                     
                     # Manual Captcha interceptor
                     if line.startswith("🔑 MANUAL CAPTCHA REQUIRED |"):
@@ -590,17 +632,18 @@ class AadhaarEngine:
                         with open(temp_captcha_path, "wb") as f_cap:
                             f_cap.write(base64.b64decode(b64_img.encode()))
                             
-                        # Send image to Telegram user
-                        with open(temp_captcha_path, "rb") as f_photo:
-                            photo_msg = self.bot.send_photo(
-                                chat_id, f_photo, 
-                                caption="⚠️ <b>Auto-Captcha solve failed!</b>\n👇 Kripya image me dikh raha captcha code manually type karein:",
-                                parse_mode='HTML'
-                            )
-                            try:
-                                if photo_msg and int(chat_id) < 0:
-                                    self.temp_msg_ids.append(photo_msg.message_id)
-                            except: pass
+                    # Send image to Telegram user
+                    try:
+                        photo_msg = await self.bot.send_photo(
+                            chat_id=int(chat_id),
+                            photo=FSInputFile(temp_captcha_path),
+                            caption="⚠️ <b>Auto-Captcha solve failed!</b>\n👇 Kripya image me dikh raha captcha code manually type karein:",
+                            parse_mode='HTML'
+                        )
+                        if photo_msg:
+                            self.temp_msg_ids.append(photo_msg.message_id)
+                    except Exception as e_p:
+                        print(f"⚠️ Failed to send captcha photo: {e_p}")
                         
                         # Wait for user input
                         user_captcha_val = await self.wait_for_input(chat_id, 'CAPTCHA')
@@ -617,7 +660,7 @@ class AadhaarEngine:
 
                     if "ENTER THE OTP RECEIVED ON YOUR REGISTERED MOBILE" in line:
                         res_otp = await self.wait_for_input(chat_id, 'OTP')
-                        self.refresh_status_card(f"📱 <b>STEP 4/4: OTP 2 Verification</b>\n\n⏳ <b>Submitting OTP 2...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
+                        await self.refresh_status_card(f"📱 <b>STEP 4/4: OTP 2 Verification</b>\n\n⏳ <b>Submitting OTP 2...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
                         self.start_preloader(f"📱 <b>STEP 4/4: OTP 2 Verification</b>\n\n⏳ <b>Submitting OTP 2...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
                         process.stdin.write(f"{res_otp}\n".encode())
                         await process.stdin.drain()
@@ -661,12 +704,12 @@ class AadhaarEngine:
                 current_retry += 1
                 if current_retry < max_retries:
                     if is_technical:
-                        self.update_status("⚠️ <b>UIDAI Server busy!</b>\n🔄 <i>5 second baad phir se try kar raha hoon...</i>")
+                        await self.update_status("⚠️ <b>UIDAI Server busy!</b>\n🔄 <i>5 second baad phir se try kar raha hoon...</i>")
                         await asyncio.sleep(5)
                     elif is_otp_error:
-                        self.update_status("❌ <b>OTP Galat Hai / Session Expired!</b>\n🔄 <i>Phir se OTP send kiya jaa raha hai, kripya wait karein...</i>")
+                        await self.update_status("❌ <b>OTP Galat Hai / Session Expired!</b>\n🔄 <i>Phir se OTP send kiya jaa raha hai, kripya wait karein...</i>")
                     else:
-                        self.update_status(f"⚠️ <b>Registry Phase Error:</b> {escape_html(str(e))}\n🔄 <i>Retrying...</i>")
+                        await self.update_status(f"⚠️ <b>Registry Phase Error:</b> {escape_html(str(e))}\n🔄 <i>Retrying...</i>")
                     await asyncio.sleep(2)
                 else:
                     if is_otp_error:
@@ -736,14 +779,16 @@ class AadhaarEngine:
                     f"🔑 <b>Password:</b> <code>{password}</code>\n\n"
                     f"⏱️ <b>Time Taken:</b> {time_str}"
                 )
-                self.bot.send_message(chat_id, success_text, parse_mode='HTML')
+                try:
+                    await self.bot.send_message(int(chat_id), success_text, parse_mode='HTML')
+                except Exception as e_s:
+                    print(f"⚠️ Failed to send success text: {e_s}")
                 
                 try:
                     if stats_manager: stats_manager.record_success(chat_id, user_info, name, mobile, uid, password, eid=eid)
                 except Exception as se:
                     print(f"⚠️ [STATS] Failed to record success: {se}")
 
-                # Save a permanent copy of the cracked Aadhaar PDF in the cracked_aadhar folder
                 try:
                     import shutil
                     safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '_', '-')).strip().replace(' ', '_')
@@ -755,48 +800,42 @@ class AadhaarEngine:
                 except Exception as e_copy:
                     print(f"⚠️ [SAVED PDF] Failed to save permanent PDF copy: {e_copy}")
 
-                # Update status card to indicate file transmission status
-                self.update_status("📤 <b>Sending Aadhaar files...</b>")
+                await self.update_status("📤 <b>Sending Aadhaar files...</b>")
                 
-                # Send the files in separate try-except blocks to prevent failure of one from losing others
                 try:
                     if os.path.exists(front):
-                        with open(front, 'rb') as f:
-                            self.bot.send_photo(chat_id, f, caption="🖼️ <b>Aadhaar Front</b>", parse_mode='HTML')
+                        await self.bot.send_photo(int(chat_id), FSInputFile(front), caption="🖼️ <b>Aadhaar Front</b>", parse_mode='HTML')
                     else:
                         print(f"⚠️ Front image file not found: {front}")
                 except Exception as e_front:
                     print(f"⚠️ Failed to send Front photo: {e_front}")
                     try:
-                        self.bot.send_message(chat_id, f"⚠️ <b>Front Photo Send Failed:</b> {escape_html(str(e_front))}", parse_mode='HTML')
-                    except: pass
+                        await self.bot.send_message(int(chat_id), f"⚠️ <b>Front Photo Send Failed:</b> {escape_html(str(e_front))}", parse_mode='HTML')
+                    except Exception: pass
                 
                 try:
                     if os.path.exists(back):
-                        with open(back, 'rb') as f:
-                            self.bot.send_photo(chat_id, f, caption="🖼️ <b>Aadhaar Back</b>", parse_mode='HTML')
+                        await self.bot.send_photo(int(chat_id), FSInputFile(back), caption="🖼️ <b>Aadhaar Back</b>", parse_mode='HTML')
                     else:
                         print(f"⚠️ Back image file not found: {back}")
                 except Exception as e_back:
                     print(f"⚠️ Failed to send Back photo: {e_back}")
                     try:
-                        self.bot.send_message(chat_id, f"⚠️ <b>Back Photo Send Failed:</b> {escape_html(str(e_back))}", parse_mode='HTML')
-                    except: pass
+                        await self.bot.send_message(int(chat_id), f"⚠️ <b>Back Photo Send Failed:</b> {escape_html(str(e_back))}", parse_mode='HTML')
+                    except Exception: pass
                 
                 try:
                     if os.path.exists(pdf_out):
-                        with open(pdf_out, 'rb') as f:
-                            self.bot.send_document(chat_id, f, caption="📄 <b>Aadhaar PDF (Unlocked)</b>")
+                        await self.bot.send_document(int(chat_id), FSInputFile(pdf_out), caption="📄 <b>Aadhaar PDF (Unlocked)</b>")
                     else:
                         print(f"⚠️ Unlocked PDF file not found: {pdf_out}")
                 except Exception as e_pdf:
                     print(f"⚠️ Failed to send PDF: {e_pdf}")
                     try:
-                        self.bot.send_message(chat_id, f"⚠️ <b>Aadhaar PDF Send Failed:</b> {escape_html(str(e_pdf))}", parse_mode='HTML')
-                    except: pass
+                        await self.bot.send_message(int(chat_id), f"⚠️ <b>Aadhaar PDF Send Failed:</b> {escape_html(str(e_pdf))}", parse_mode='HTML')
+                    except Exception: pass
 
-                # Finalize status card update
-                self.update_status(f"✅ <b>Process Completed!</b>\nAadhaar data has been sent above.")
+                await self.update_status(f"✅ <b>Process Completed!</b>\nAadhaar data has been sent above.")
 
                 # Cleanup all temporary files to save disk space and protect privacy
                 for temp_f in [front, back, pdf_out, file_path]:
@@ -828,28 +867,30 @@ class AadhaarEngine:
                     f"ℹ️ <i>Bot isko crack nahi kar paya. Hum aapko original locked PDF send kar rahe hain. Aap ise manual password (Name ke first 4 capital letters + DOB Year) se open kar sakte hain.</i>\n\n"
                     f"⏱️ <b>Time Taken:</b> {time_str}"
                 )
-                self.bot.send_message(chat_id, uncracked_text, parse_mode='HTML')
+                try:
+                    await self.bot.send_message(int(chat_id), uncracked_text, parse_mode='HTML')
+                except Exception as e_u:
+                    print(f"⚠️ Failed to send uncracked text: {e_u}")
 
                 try:
                     if stats_manager: stats_manager.record_failure()
                 except Exception as se:
                     print(f"⚠️ [STATS] Failed to record failure: {se}")
 
-                self.update_status("📤 <b>Sending Locked Aadhaar PDF...</b>")
+                await self.update_status("📤 <b>Sending Locked Aadhaar PDF...</b>")
 
                 try:
                     if os.path.exists(locked_pdf_path):
-                        with open(locked_pdf_path, 'rb') as f:
-                            self.bot.send_document(chat_id, f, caption="📄 <b>Aadhaar PDF (Locked)</b>")
+                        await self.bot.send_document(int(chat_id), FSInputFile(locked_pdf_path), caption="📄 <b>Aadhaar PDF (Locked)</b>")
                     else:
                         print(f"⚠️ Locked PDF file not found: {locked_pdf_path}")
                 except Exception as e_pdf:
                     print(f"⚠️ Failed to send PDF: {e_pdf}")
                     try:
-                        self.bot.send_message(chat_id, f"⚠️ <b>Aadhaar PDF Send Failed:</b> {escape_html(str(e_pdf))}", parse_mode='HTML')
-                    except: pass
+                        await self.bot.send_message(int(chat_id), f"⚠️ <b>Aadhaar PDF Send Failed:</b> {escape_html(str(e_pdf))}", parse_mode='HTML')
+                    except Exception: pass
 
-                self.update_status(f"✅ <b>Process Completed!</b>\nLocked Aadhaar PDF has been sent above.")
+                await self.update_status(f"✅ <b>Process Completed!</b>\nLocked Aadhaar PDF has been sent above.")
 
                 if os.path.exists(file_path):
                     try: os.remove(file_path)
@@ -868,20 +909,22 @@ class AadhaarEngine:
 
         except Exception as e:
             self.stop_preloader()
-            self.update_status(f"❌ <b>PDF Crack Error:</b> {escape_html(str(e))}")
+            await self.update_status(f"❌ <b>PDF Crack Error:</b> {escape_html(str(e))}")
 
 
 async def execute_task(bot, chat_id, name, mobile, dob, user_info=None):
     str_chat_id = str(chat_id)
     # Check if already processing a task
     if str_chat_id in active_tasks:
-        bot.send_message(chat_id, "⏳ <b>Aapka task pehle se process ho raha hai.</b> Kripya wait karein.", parse_mode='HTML')
+        try: await bot.send_message(int(chat_id), "⏳ <b>Aapka task pehle se process ho raha hai.</b> Kripya wait karein.", parse_mode='HTML')
+        except Exception: pass
         return False
 
     # Enforce dynamic max concurrent active users
     max_concurrent = stats_manager.get_max_concurrent_tasks() if stats_manager else int(os.environ.get('MAX_CONCURRENT_TASKS', '15'))
     if len(active_tasks) >= max_concurrent:
-        bot.send_message(chat_id, f"⚠️ <b>Bot is overloaded!</b>\nAbhi ek saath {max_concurrent} users pehle se kaam kar rahe hain. Kripya thori der me try karein.", parse_mode='HTML')
+        try: await bot.send_message(int(chat_id), f"⚠️ <b>Bot is overloaded!</b>\nAbhi ek saath {max_concurrent} users pehle se kaam kar rahe hain. Kripya thori der me try karein.", parse_mode='HTML')
+        except Exception: pass
         return False
 
     active_tasks.add(str_chat_id)
@@ -904,7 +947,7 @@ async def execute_task(bot, chat_id, name, mobile, dob, user_info=None):
             user_msg = err_str
             real_msg = err_str
 
-        engine.update_status(f"❌ <b>Task Failed:</b> {escape_html(user_msg)}")
+        await engine.update_status(f"❌ <b>Task Failed:</b> {escape_html(user_msg)}")
         try:
             is_user_error = any(x in user_msg.lower() for x in [
                 "no record", "not found", "mismatch", "validation failed", 
