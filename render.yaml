@@ -1,0 +1,36 @@
+﻿services:
+  - type: web
+    name: aadhar-download-bot
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m bot.main
+    healthCheckPath: /health
+
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+
+      - key: DATABASE_URL
+        sync: false
+
+      - key: ADMIN_IDS
+        sync: false
+
+      - key: DEVELOPER_USERNAME
+        value: tgekaiva
+
+      - key: INITIAL_CREDITS
+        value: "3"
+
+      - key: DEFAULT_RECHARGE_AMOUNT
+        value: "10"
+
+      - key: LOG_LEVEL
+        value: INFO
+
+      - key: PYTHONIOENCODING
+        value: utf-8
+
+      - key: PORT
+        value: "10000"

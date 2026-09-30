@@ -1,0 +1,24 @@
+﻿# Environments & Secrets
+.env
+*.env
+.venv
+venv/
+ENV/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Output directories & sensitive artifacts
+cracked_aadhar/
+*.pdf
+working_proxies.json
+errors.log
+stats.json
+cracked_history.txt
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store
