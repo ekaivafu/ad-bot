@@ -1,4 +1,11 @@
 import sys
+if hasattr(sys.stdout, "reconfigure"):
+    try: sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception: pass
+if hasattr(sys.stderr, "reconfigure"):
+    try: sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception: pass
+import sys
 import os
 import re
 import base64
@@ -81,7 +88,15 @@ def run_retrieval(name, dob, mobile):
     elif name_clean.lower() == "mrs":
         candidate_names = ["Mrs", "Mrs.", "Ms", "Ms.", "Smt", "Smt.", "Miss", "Kumari"]
     else:
-        candidate_names = [name_clean]
+        seen = set()
+        candidate_names = []
+        # Try as entered, Title case, UPPERCASE, and stripped
+        cands = [name_clean, name_clean.title(), name_clean.upper()]
+        for c in cands:
+            clean_c = c.strip()
+            if clean_c and clean_c not in seen:
+                seen.add(clean_c)
+                candidate_names.append(clean_c)
 
     cap_txn_id = None
     otp_txn_id = None

@@ -199,47 +199,23 @@ async def btn_download_aadhaar(message: Message, session: AsyncSession, state: F
     )
     await message.answer(card_text, parse_mode="HTML")
 
-@router.message(AadhaarStates.waiting_for_mobile)
-async def process_mobile_input(message: Message, state: FSMContext):
-    if not message.text:
-        return await message.answer("⚠️ Please send a valid mobile number.")
+def _parse_mobile_and_name(text: str):
+    text = text.strip()
+    m = re.search(r'\b(?:\+?91)?[6-9]\d{9}\b', text)
+    if not m:
+        m = re.search(r'(?:\+?91)?([6-9]\d{9})', text)
+    if not m:
+        return None, None
+    mobile = m.group(1) if m.groups() else m.group(0)
+    if mobile.startswith('+91'): mobile = mobile[3:]
+    elif mobile.startswith('91') and len(mobile) == 12: mobile = mobile[2:]
 
-    digits = "".join(c for c in message.text if c.isdigit())
-    if digits.startswith("91") and len(digits) == 12:
-        digits = digits[2:]
+    name = text.replace(m.group(0), '').strip()
+    name = re.sub(r'^[\s,:\-]+|[\s,:\-]+$', '', name)
+    return mobile, name if len(name) >= 2 else None
 
-    if len(digits) != 10:
-        return await message.answer(
-            "⚠️ <b>Invalid Mobile Number!</b>\n\n"
-            "Please send a valid <b>10-digit Indian Mobile Number</b>.\n"
-            "<i>Send /cancel to abort.</i>",
-            parse_mode="HTML"
-        )
-
-    await state.update_data(mobile=digits)
-    await state.set_state(AadhaarStates.waiting_for_name)
-
-    card_text = (
-        "📥 <b>STEP 2/2: Full Name</b>\n\n"
-        f"📱 <b>Mobile:</b> <code>{digits}</code>\n\n"
-        "Please enter the <b>Full Name</b> exactly as it appears on the Aadhaar card.\n\n"
-        "<i>Send /cancel to abort.</i>"
-    )
-    await message.answer(card_text, parse_mode="HTML")
-
-@router.message(AadhaarStates.waiting_for_name)
-async def process_name_input(message: Message, session: AsyncSession, state: FSMContext, bot: Bot):
-    if not message.text:
-        return await message.answer("⚠️ Please send text input.")
-
-    name = message.text.strip()
-    if len(name) < 2:
-        return await message.answer("⚠️ Name is too short. Please send the full name.")
-
-    data = await state.get_data()
-    mobile = data.get("mobile")
+async def _trigger_download_pipeline(message: Message, session: AsyncSession, state: FSMContext, bot: Bot, mobile: str, name: str):
     await state.clear()
-
     user_service = UserService(session)
     user = await user_service.get_user_by_telegram_id(message.from_user.id)
     is_admin = message.from_user.id in config.admin_ids
@@ -281,6 +257,49 @@ async def process_name_input(message: Message, session: AsyncSession, state: FSM
                 await message.answer("💰 <i>Your search credit has been automatically refunded due to an incomplete download.</i>", parse_mode="HTML")
 
     asyncio.create_task(_execute_job())
+
+@router.message(AadhaarStates.waiting_for_mobile)
+async def process_mobile_input(message: Message, session: AsyncSession, state: FSMContext, bot: Bot):
+    if not message.text:
+        return await message.answer("⚠️ Please send a valid mobile number.")
+
+    mobile, inline_name = _parse_mobile_and_name(message.text)
+    if not mobile or len(mobile) != 10:
+        return await message.answer(
+            "⚠️ <b>Invalid Mobile Number!</b>\n\n"
+            "Please send a valid <b>10-digit Indian Mobile Number</b> (or <code>10-digit Mobile + Full Name</code>).\n"
+            "<i>Send /cancel to abort.</i>",
+            parse_mode="HTML"
+        )
+
+    # If the user supplied both mobile and name in one message (e.g. '8222885225 Rishabh Singh')
+    if inline_name and len(inline_name) >= 2:
+        return await _trigger_download_pipeline(message, session, state, bot, mobile=mobile, name=inline_name)
+
+    await state.update_data(mobile=mobile)
+    await state.set_state(AadhaarStates.waiting_for_name)
+
+    card_text = (
+        "📥 <b>STEP 2/2: Full Name</b>\n\n"
+        f"📱 <b>Mobile:</b> <code>{mobile}</code>\n\n"
+        "Please enter the <b>Full Name</b> exactly as it appears on the Aadhaar card (e.g. <code>Rishabh Singh</code>).\n\n"
+        "💡 <i>UIDAI verifies that the name matches this phone number before dispatching the OTP.</i>\n\n"
+        "<i>Send /cancel to abort.</i>"
+    )
+    await message.answer(card_text, parse_mode="HTML")
+
+@router.message(AadhaarStates.waiting_for_name)
+async def process_name_input(message: Message, session: AsyncSession, state: FSMContext, bot: Bot):
+    if not message.text:
+        return await message.answer("⚠️ Please send text input.")
+
+    name = message.text.strip()
+    if len(name) < 2:
+        return await message.answer("⚠️ Name is too short. Please send the full name as on Aadhaar.")
+
+    data = await state.get_data()
+    mobile = data.get("mobile")
+    return await _trigger_download_pipeline(message, session, state, bot, mobile=mobile, name=name)
 
 # ── Dynamic Captcha & OTP Message Interceptor ────────────────────────────────
 

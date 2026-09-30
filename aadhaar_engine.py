@@ -20,7 +20,7 @@ load_dotenv()
 # Force all spawned python subprocesses to use UTF-8 output encoding
 os.environ['PYTHONIOENCODING'] = 'utf-8'
 
-DEVELOPER_USERNAME = os.getenv('DEVELOPER_USERNAME', '@Samuraiwooo')
+DEVELOPER_USERNAME = os.getenv('DEVELOPER_USERNAME', 'tgekaiva').lstrip('@')
 
 def escape_html(s):
     return str(s or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
@@ -129,7 +129,7 @@ class AadhaarEngine:
         """Updates a single live status message dynamically to avoid spamming the chat."""
         if not self.chat_id or self.chat_id == "master":
             return
-        footer = f"\n━━━━━━━━━━━━━━━━━━━━━━\n<i>Dev: @{DEVELOPER_USERNAME} | Semsepiol</i>"
+        footer = f"\n━━━━━━━━━━━━━━━━━━━━━━\n<i>Dev: @{DEVELOPER_USERNAME}</i>"
         if self.status_msg_id:
             try:
                 self.bot.edit_message_text(chat_id=self.chat_id, message_id=self.status_msg_id, text=f"{text}{footer}", parse_mode='HTML')
@@ -208,7 +208,7 @@ class AadhaarEngine:
                 
                 base_text = getattr(self, 'preloader_base_text', '⏳ Processing...')
                 full_text = f"{base_text}\n━━━━━━━━━━━━━━━━━━━━━━\n{spin} <b>{bar}</b>"
-                footer = f"\n━━━━━━━━━━━━━━━━━━━━━━\n<i>Dev: @{DEVELOPER_USERNAME} | Semsepiol</i>"
+                footer = f"\n━━━━━━━━━━━━━━━━━━━━━━\n<i>Dev: @{DEVELOPER_USERNAME}</i>"
                 
                 if self.status_msg_id:
                     try:
