@@ -466,11 +466,31 @@ class AadhaarEngine:
                 line = line_bytes.decode('utf-8', errors='ignore').strip()
                 print(f"[get_eid] {line}")  # Log subprocess actions to the bot terminal
                 
-                # Intercept prefix rotation candidate to show live search progress
-                if "Trying name payload:" in line:
+                # Intercept live search & captcha progress to show dynamic feedback
+                if "Trying name:" in line or "Trying name payload:" in line:
+                    c_name = line.split(":")[-1].replace("...", "").strip()
                     self.preloader_base_text = (
                         f"📱 <b>STEP 3/4: EID Retrieval</b>\n\n"
-                        f"🔍 <b>Searching database...</b>\n\n"
+                        f"🔍 <b>Trying name:</b> <code>{c_name}</code>\n"
+                        f"📱 <b>Target Mobile:</b> <code>{mobile}</code>"
+                    )
+                elif "Fetching Captcha" in line:
+                    self.preloader_base_text = (
+                        f"📱 <b>STEP 3/4: EID Retrieval</b>\n\n"
+                        f"⏳ <b>Fetching Captcha from UIDAI...</b>\n"
+                        f"📱 <b>Target Mobile:</b> <code>{mobile}</code>"
+                    )
+                elif "Captcha Solved:" in line:
+                    self.preloader_base_text = (
+                        f"📱 <b>STEP 3/4: EID Retrieval</b>\n\n"
+                        f"🧩 <b>Captcha Solved!</b> Requesting OTP from UIDAI...\n"
+                        f"📱 <b>Target Mobile:</b> <code>{mobile}</code>"
+                    )
+                elif "UIDAI Response:" in line:
+                    resp_txt = line.split("UIDAI Response:")[1].strip()
+                    self.preloader_base_text = (
+                        f"📱 <b>STEP 3/4: EID Retrieval</b>\n\n"
+                        f"⚠️ <b>UIDAI Status:</b> {escape_html(resp_txt[:50])}\n"
                         f"📱 <b>Target Mobile:</b> <code>{mobile}</code>"
                     )
 

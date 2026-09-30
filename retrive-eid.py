@@ -12,6 +12,13 @@ import base64
 import requests
 import uuid
 import ddddocr
+_ocr = None
+def get_ocr():
+    global _ocr
+    if _ocr is None:
+        _ocr = ddddocr.DdddOcr(show_ad=False)
+    return _ocr
+
 import json
 from io import BytesIO
 
@@ -109,7 +116,7 @@ def run_retrieval(name, dob, mobile):
     for full_name in candidate_names:
         if technical_diff:
             break
-        print(f"🔍 [RETRIEVAL] Trying name payload: '{full_name}'...")
+        print(f"🔍 Trying name: {full_name}...", flush=True)
         
         max_captcha_retries = 3
         attempt = 1
@@ -120,7 +127,8 @@ def run_retrieval(name, dob, mobile):
         while attempt <= max_captcha_retries and captcha_attempts < max_captcha_attempts:
             captcha_attempts += 1
             try:
-                res_cap = session.post(CAPTCHA_URL, json=captcha_payload, headers=headers, timeout=60)
+                print("⏳ Fetching Captcha from UIDAI...", flush=True)
+                res_cap = session.post(CAPTCHA_URL, json=captcha_payload, headers=headers, timeout=15)
                 res_cap.raise_for_status()
                 try:
                     cap_data = res_cap.json()
@@ -142,7 +150,7 @@ def run_retrieval(name, dob, mobile):
                     if not captcha_val:
                         raise Exception("No manual captcha entered.")
                 else:
-                    ocr = ddddocr.DdddOcr(show_ad=False)
+                    ocr = get_ocr()
                     res = ocr.classification(img_bytes)
                     captcha_val = str(res or '').strip()
                     captcha_val = re.sub(r'[^a-zA-Z0-9]', '', captcha_val)
@@ -151,7 +159,7 @@ def run_retrieval(name, dob, mobile):
                         print(f"⚠️ [OCR] Rejected noisy read '{captcha_val}' (Length {len(captcha_val)} != 6). Fetching new captcha...")
                         continue
                     
-                print(f"Decoded Captcha: {captcha_val}")
+                print(f"🧩 Captcha Solved: {captcha_val}. Requesting OTP from UIDAI...", flush=True)
                 
                 details_payload = {
                     "name": full_name,
@@ -166,7 +174,7 @@ def run_retrieval(name, dob, mobile):
                     "resendOtp": False
                 }
 
-                res_otp = session.post(RETRIEVE_URL, json=details_payload, headers=headers, timeout=60)
+                res_otp = session.post(RETRIEVE_URL, json=details_payload, headers=headers, timeout=15)
                 try:
                     otp_res_json = res_otp.json()
                 except ValueError:
@@ -186,7 +194,7 @@ def run_retrieval(name, dob, mobile):
 
                 # If not broken by success, log the response and check for errors
                 msg = res_data.get('message') or otp_res_json.get('message') or ''
-                print(f"Server Response for '{full_name}' (Attempt {attempt}): {msg}")
+                print(f"⚠️ UIDAI Response: {msg}", flush=True)
                 if msg:
                     last_server_msg = msg
 
@@ -208,7 +216,7 @@ def run_retrieval(name, dob, mobile):
                 attempt += 1
             except Exception as ex:
                 if attempt == max_captcha_retries or captcha_attempts == max_captcha_attempts:
-                    print(f"⚠️ Error for '{full_name}' on attempt {attempt}: {ex}")
+                    print(f"⚠️ Error for '{full_name}' on attempt {attempt}: {ex}", flush=True)
                     break
         
         if technical_diff:

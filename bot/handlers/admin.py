@@ -60,6 +60,71 @@ class PlanAdminStates(StatesGroup):
 
 router = Router()
 
+@router.message(Command("debug"))
+async def cmd_debug(message: Message, bot: Bot):
+    """Real-time server diagnostics: checks IP, Geo, and UIDAI reachability directly from Render."""
+    if message.from_user.id not in config.admin_ids:
+        return
+
+    msg = await message.answer("🔄 <b>Running Full UIDAI & Server Diagnostics...</b>", parse_mode="HTML")
+
+    import requests, time, platform
+    lines = []
+    lines.append(f"🖥️ <b>OS / Platform:</b> <code>{platform.platform()}</code>")
+    lines.append(f"🐍 <b>Python:</b> <code>{platform.python_version()}</code>")
+
+    # 1. IP & Geo Location Check
+    try:
+        r_ip = requests.get("http://ip-api.com/json/", timeout=6).json()
+        ip = r_ip.get("query", "N/A")
+        country = r_ip.get("country", "N/A")
+        isp = r_ip.get("isp", "N/A")
+        lines.append(f"🌐 <b>Server IP:</b> <code>{ip}</code>")
+        lines.append(f"📍 <b>Location:</b> <b>{country}</b> ({r_ip.get('city', '')})")
+        lines.append(f"🏢 <b>ISP / Host:</b> {isp}")
+    except Exception as e_ip:
+        lines.append(f"🌐 <b>Server IP Check Failed:</b> <code>{e_ip}</code>")
+
+    # 2. UIDAI Endpoints Direct Connectivity Check
+    test_urls = {
+        "myaadhaar": "https://myaadhaar.uidai.gov.in",
+        "tathya_base": "https://tathya.uidai.gov.in",
+        "captcha_api": "https://tathya.uidai.gov.in/audioCaptchaService/api/captcha/v3/generation",
+    }
+
+    lines.append("\n📡 <b>UIDAI Server Reachability:</b>")
+    for name, url in test_urls.items():
+        t0 = time.time()
+        try:
+            hdrs = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "appID": "MYAADHAAR"
+            }
+            if name == "captcha_api":
+                r = requests.post(url, json={"captchaLength": "6", "captchaType": "2", "audioCaptchaRequired": True}, headers=hdrs, timeout=8)
+            else:
+                r = requests.get(url, headers=hdrs, timeout=8)
+            ms = int((time.time() - t0) * 1000)
+            icon = "✅" if r.status_code < 400 else "⚠️"
+            lines.append(f"{icon} <code>{name}</code>: HTTP {r.status_code} ({ms}ms)")
+        except requests.exceptions.Timeout:
+            lines.append(f"🛑 <code>{name}</code>: <b>TIMED OUT</b> (Blocked by UIDAI Firewall)")
+        except Exception as e_req:
+            lines.append(f"❌ <code>{name}</code>: {html.escape(str(e_req)[:80])}")
+
+    # 3. Test OCR engine
+    try:
+        import ddddocr
+        t0 = time.time()
+        _ocr = ddddocr.DdddOcr(show_ad=False)
+        lines.append(f"\n🧠 <b>OCR Engine:</b> ✅ Ready ({int((time.time() - t0)*1000)}ms)")
+    except Exception as e_ocr:
+        lines.append(f"\n🧠 <b>OCR Engine:</b> ❌ Failed: {e_ocr}")
+
+    await msg.edit_text("\n".join(lines), parse_mode="HTML")
+
+
+
 def is_admin(user_id: int) -> bool:
     return user_id in config.admin_ids
 
