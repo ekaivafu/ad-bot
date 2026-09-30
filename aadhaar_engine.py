@@ -493,8 +493,8 @@ class AadhaarEngine:
                     await self.refresh_status_card(otp1_card)
                 
                 # Manual Captcha interceptor
-                if line.startswith("🔑 MANUAL CAPTCHA REQUIRED |"):
-                    b64_img = line.split("🔑 MANUAL CAPTCHA REQUIRED |")[1].strip()
+                if "MANUAL CAPTCHA REQUIRED |" in line:
+                    b64_img = line.split("MANUAL CAPTCHA REQUIRED |")[1].strip()
                     self.stop_preloader()
                     
                     # Save temporary image file
@@ -530,9 +530,17 @@ class AadhaarEngine:
 
                 # Prompt the Telegram user for OTP input and feed it to stdin
                 if "ENTER THE OTP RECEIVED ON YOUR REGISTERED MOBILE" in line:
+                    self.stop_preloader()
+                    await self.refresh_status_card(
+                        f"📲 <b>OTP 1 Received on Your Phone!</b>\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"📱 <b>Target:</b> <code>{mobile}</code>\n\n"
+                        f"📩 An OTP has been sent to your registered mobile number.\n\n"
+                        f"👉 <b>Please type the OTP below</b> to continue:"
+                    )
                     res_otp = await self.wait_for_input(chat_id, 'OTP')
-                    await self.refresh_status_card(f"📱 <b>STEP 3/4: OTP 1 Verification</b>\n\n⏳ <b>Submitting OTP 1...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
-                    self.start_preloader(f"📱 <b>STEP 3/4: OTP 1 Verification</b>\n\n⏳ <b>Submitting OTP 1...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
+                    await self.refresh_status_card(f"🚀 <b>STEP 3/4: OTP 1 Verification</b>\n\n⏳ <b>Submitting OTP 1...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
+                    self.start_preloader(f"🚀 <b>STEP 3/4: OTP 1 Verification</b>\n\n⏳ <b>Submitting OTP 1...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
                     process.stdin.write(f"{res_otp}\n".encode())
                     await process.stdin.drain()
                 
@@ -623,8 +631,8 @@ class AadhaarEngine:
                         await self.refresh_status_card(otp2_card)
                     
                     # Manual Captcha interceptor
-                    if line.startswith("🔑 MANUAL CAPTCHA REQUIRED |"):
-                        b64_img = line.split("🔑 MANUAL CAPTCHA REQUIRED |")[1].strip()
+                    if "MANUAL CAPTCHA REQUIRED |" in line:
+                        b64_img = line.split("MANUAL CAPTCHA REQUIRED |")[1].strip()
                         self.stop_preloader()
                         
                         # Save temporary image file
@@ -659,12 +667,20 @@ class AadhaarEngine:
                         await process.stdin.drain()
 
                     if "ENTER THE OTP RECEIVED ON YOUR REGISTERED MOBILE" in line:
+                        self.stop_preloader()
+                        await self.refresh_status_card(
+                            f"📲 <b>OTP 2 Received on Your Phone!</b>\n"
+                            f"━━━━━━━━━━━━━━━━━━━━━━\n"
+                            f"📱 <b>Target:</b> <code>{mobile}</code>\n\n"
+                            f"📩 A second OTP has been sent to your registered mobile number.\n\n"
+                            f"👉 <b>Please type OTP 2 below</b> to continue:"
+                        )
                         res_otp = await self.wait_for_input(chat_id, 'OTP')
-                        await self.refresh_status_card(f"📱 <b>STEP 4/4: OTP 2 Verification</b>\n\n⏳ <b>Submitting OTP 2...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
-                        self.start_preloader(f"📱 <b>STEP 4/4: OTP 2 Verification</b>\n\n⏳ <b>Submitting OTP 2...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
+                        await self.refresh_status_card(f"🚀 <b>STEP 4/4: OTP 2 Verification</b>\n\n⏳ <b>Submitting OTP 2...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
+                        self.start_preloader(f"🚀 <b>STEP 4/4: OTP 2 Verification</b>\n\n⏳ <b>Submitting OTP 2...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
                         process.stdin.write(f"{res_otp}\n".encode())
                         await process.stdin.drain()
-                        self.start_preloader(f"📱 <b>STEP 4/4: Aadhaar Download</b>\n\n📥 <b>Downloading File...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
+                        self.start_preloader(f"🚀 <b>STEP 4/4: Aadhaar Download</b>\n\n📥 <b>Downloading File...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
 
                 await process.wait()
                 
