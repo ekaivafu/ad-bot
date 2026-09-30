@@ -1,4 +1,5 @@
 import logging
+import re
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy import text
 from bot.config import config
@@ -30,6 +31,9 @@ async def get_session() -> AsyncSession:
 async def init_db():
     """Create tables if not existing, ensure schema migrations, and seed default plans."""
     from bot.services.plan_service import PlanService
+
+    masked_url = re.sub(r":([^@]+)@", r":****@", config.database_url)
+    logger.info(f"Connecting to database: {masked_url}")
 
     # DDL migrations run with AUTOCOMMIT isolation level to allow ALTER TYPE / ALTER TABLE
     try:
@@ -98,3 +102,4 @@ async def init_db():
             await plan_service.set_setting("referral_reward_credits", "2")
         await session.commit()
 
+    logger.info("Database initialized successfully! All tables, migrations, and default plans are verified.")

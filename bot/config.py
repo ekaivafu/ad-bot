@@ -1,7 +1,39 @@
 import os
+import re
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 from typing import List
+
+def clean_database_url(raw_url: str) -> str:
+    """Normalize any database URL format for asyncpg + SQLAlchemy and fix Neon pooler SNI."""
+    if not raw_url:
+        return ""
+    url = raw_url.strip().strip('"').strip("'")
+    if url.startswith("DATABASE_URL="):
+        url = url.split("=", 1)[1].strip().strip('"').strip("'")
+    if url.startswith("postgres://"):
+        url = "postgresql+asyncpg://" + url[11:]
+    elif url.startswith("postgresql://"):
+        url = "postgresql+asyncpg://" + url[13:]
+
+    # asyncpg requires ssl=require instead of sslmode=require
+    if "sslmode=require" in url:
+        url = url.replace("sslmode=require", "ssl=require")
+
+    # Clean channel_binding parameter unsupported by asyncpg
+    if "&channel_binding=require" in url:
+        url = url.replace("&channel_binding=require", "")
+    if "?channel_binding=require&" in url:
+        url = url.replace("channel_binding=require&", "")
+    elif "?channel_binding=require" in url:
+        url = url.replace("?channel_binding=require", "")
+
+    # For Neon: remove -pooler suffix so SQLAlchemy uses direct compute connection.
+    # This prevents PgBouncer SNI authentication failure on external hosts like Render.
+    if "-pooler." in url:
+        url = url.replace("-pooler.", ".")
+
+    return url
 
 class Settings(BaseSettings):
     bot_token_raw: str = Field("", validation_alias="BOT_TOKEN")
@@ -17,34 +49,23 @@ class Settings(BaseSettings):
 
     @property
     def bot_token(self) -> str:
-        return (
+        token = (
             self.bot_token_raw
             or self.telegram_bot_token_raw
             or os.environ.get("BOT_TOKEN", "")
             or os.environ.get("TELEGRAM_BOT_TOKEN", "")
-        )
+        ).strip().strip('"').strip("'")
+        if token.startswith("BOT_TOKEN="):
+            token = token.split("=", 1)[1].strip().strip('"').strip("'")
+        return token
 
     @property
     def database_url(self) -> str:
-        url = (
+        raw = (
             self.database_url_raw
             or os.environ.get("DATABASE_URL", "")
-        ).strip()
-        if not url:
-            return ""
-        if url.startswith("postgres://"):
-            url = "postgresql+asyncpg://" + url[11:]
-        elif url.startswith("postgresql://"):
-            url = "postgresql+asyncpg://" + url[13:]
-        if "sslmode=require" in url:
-            url = url.replace("sslmode=require", "ssl=require")
-        if "&channel_binding=require" in url:
-            url = url.replace("&channel_binding=require", "")
-        if "?channel_binding=require&" in url:
-            url = url.replace("channel_binding=require&", "")
-        elif "?channel_binding=require" in url:
-            url = url.replace("?channel_binding=require", "")
-        return url
+        )
+        return clean_database_url(raw)
 
     @property
     def admin_ids(self) -> List[int]:
@@ -56,7 +77,13 @@ class Settings(BaseSettings):
         )
         if not raw:
             return []
-        return [int(uid.strip()) for uid in raw.split(",") if uid.strip().isdigit()]
+        # clean any extra characters
+        cleaned_ids = []
+        for uid in raw.replace(";", ",").split(","):
+            val = uid.strip().strip('"').strip("'")
+            if val.isdigit():
+                cleaned_ids.append(int(val))
+        return cleaned_ids
 
     model_config = SettingsConfigDict(
         env_file=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),
