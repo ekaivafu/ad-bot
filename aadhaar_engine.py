@@ -1,3 +1,10 @@
+import sys
+if hasattr(sys.stdout, "reconfigure"):
+    try: sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception: pass
+if hasattr(sys.stderr, "reconfigure"):
+    try: sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception: pass
 from aiogram.types import FSInputFile
 import asyncio
 import os
@@ -481,16 +488,9 @@ class AadhaarEngine:
                     await self.update_status("🛑 <b>NETWORK ERROR!</b> Internet connection is extremely slow or gateway server is down. Please try again.")
                     raise Exception("Network issue / slow portal response.")
                 
-                # Successful OTP Triggered notification
+                # OTP Sent Successfully notification logged
                 if "OTP Sent Successfully" in line:
                     self.stop_preloader()
-                    otp1_card = get_ui_card(
-                        step_num="3",
-                        title="OTP 1 Verification",
-                        description="🚀 <b>OTP 1 Sent Successfully!</b>\n👇 Kripya niche chat me <b>OTP</b> type karein:",
-                        target=mobile
-                    )
-                    await self.refresh_status_card(otp1_card)
                 
                 # Manual Captcha interceptor
                 if "MANUAL CAPTCHA REQUIRED |" in line:
@@ -531,13 +531,17 @@ class AadhaarEngine:
                 # Prompt the Telegram user for OTP input and feed it to stdin
                 if "ENTER THE OTP RECEIVED ON YOUR REGISTERED MOBILE" in line:
                     self.stop_preloader()
-                    await self.refresh_status_card(
-                        f"📲 <b>OTP 1 Received on Your Phone!</b>\n"
-                        f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                        f"📱 <b>Target:</b> <code>{mobile}</code>\n\n"
-                        f"📩 An OTP has been sent to your registered mobile number.\n\n"
-                        f"👉 <b>Please type the OTP below</b> to continue:"
+                    otp1_card = get_ui_card(
+                        step_num="3",
+                        title="OTP 1 Verification",
+                        description=(
+                            "🚀 <b>OTP 1 Sent Successfully!</b>\n\n"
+                            "📩 An OTP has been sent to your registered mobile number.\n\n"
+                            "👉 <b>Please type the OTP below</b> in this chat:"
+                        ),
+                        target=mobile
                     )
+                    await self.refresh_status_card(otp1_card)
                     res_otp = await self.wait_for_input(chat_id, 'OTP')
                     await self.refresh_status_card(f"🚀 <b>STEP 3/4: OTP 1 Verification</b>\n\n⏳ <b>Submitting OTP 1...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
                     self.start_preloader(f"🚀 <b>STEP 3/4: OTP 1 Verification</b>\n\n⏳ <b>Submitting OTP 1...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
@@ -619,16 +623,9 @@ class AadhaarEngine:
                         solved_cap = line.split("Decoded Captcha:")[1].strip()
                         await self.update_status(f"🧩 <b>Captcha Solved:</b> <code>{solved_cap}</code>. Requesting OTP...")
                     
-                    # Successful OTP Triggered notification
+                    # OTP 2 Sent Successfully notification logged
                     if "✅ OTP Sent Successfully!" in line:
                         self.stop_preloader()
-                        otp2_card = get_ui_card(
-                            step_num="4",
-                            title="OTP 2 Verification",
-                            description="✅ <b>OTP 2 Sent Successfully!</b>\n👇 Kripya niche chat me <b>OTP</b> type karein:",
-                            target=mobile
-                        )
-                        await self.refresh_status_card(otp2_card)
                     
                     # Manual Captcha interceptor
                     if "MANUAL CAPTCHA REQUIRED |" in line:
@@ -640,19 +637,19 @@ class AadhaarEngine:
                         with open(temp_captcha_path, "wb") as f_cap:
                             f_cap.write(base64.b64decode(b64_img.encode()))
                             
-                    # Send image to Telegram user
-                    try:
-                        photo_msg = await self.bot.send_photo(
-                            chat_id=int(chat_id),
-                            photo=FSInputFile(temp_captcha_path),
-                            caption="⚠️ <b>Auto-Captcha solve failed!</b>\n👇 Kripya image me dikh raha captcha code manually type karein:",
-                            parse_mode='HTML'
-                        )
-                        if photo_msg:
-                            self.temp_msg_ids.append(photo_msg.message_id)
-                    except Exception as e_p:
-                        print(f"⚠️ Failed to send captcha photo: {e_p}")
-                        
+                        # Send image to Telegram user
+                        try:
+                            photo_msg = await self.bot.send_photo(
+                                chat_id=int(chat_id),
+                                photo=FSInputFile(temp_captcha_path),
+                                caption="⚠️ <b>Auto-Captcha solve failed!</b>\n👇 Kripya image me dikh raha captcha code manually type karein:",
+                                parse_mode='HTML'
+                            )
+                            if photo_msg:
+                                self.temp_msg_ids.append(photo_msg.message_id)
+                        except Exception as e_p:
+                            print(f"⚠️ Failed to send captcha photo: {e_p}")
+                            
                         # Wait for user input
                         user_captcha_val = await self.wait_for_input(chat_id, 'CAPTCHA')
                         self.start_preloader(f"📱 <b>STEP 4/4: Aadhaar Download</b>\n\n⏳ <b>Submitting Captcha...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
@@ -668,13 +665,17 @@ class AadhaarEngine:
 
                     if "ENTER THE OTP RECEIVED ON YOUR REGISTERED MOBILE" in line:
                         self.stop_preloader()
-                        await self.refresh_status_card(
-                            f"📲 <b>OTP 2 Received on Your Phone!</b>\n"
-                            f"━━━━━━━━━━━━━━━━━━━━━━\n"
-                            f"📱 <b>Target:</b> <code>{mobile}</code>\n\n"
-                            f"📩 A second OTP has been sent to your registered mobile number.\n\n"
-                            f"👉 <b>Please type OTP 2 below</b> to continue:"
+                        otp2_card = get_ui_card(
+                            step_num="4",
+                            title="OTP 2 Verification",
+                            description=(
+                                "🚀 <b>OTP 2 Sent Successfully!</b>\n\n"
+                                "📩 A second OTP has been sent to your registered mobile number.\n\n"
+                                "👉 <b>Please type OTP 2 below</b> to download Aadhaar:"
+                            ),
+                            target=mobile
                         )
+                        await self.refresh_status_card(otp2_card)
                         res_otp = await self.wait_for_input(chat_id, 'OTP')
                         await self.refresh_status_card(f"🚀 <b>STEP 4/4: OTP 2 Verification</b>\n\n⏳ <b>Submitting OTP 2...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")
                         self.start_preloader(f"🚀 <b>STEP 4/4: OTP 2 Verification</b>\n\n⏳ <b>Submitting OTP 2...</b>\n📱 <b>Target Mobile:</b> <code>{mobile}</code>")

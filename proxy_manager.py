@@ -143,29 +143,29 @@ def get_proxy_dict():
                 "https": f"http://{chosen}",
             }
 
-    # 3. Use cached auto-fetched working proxies (refresh if stale)
-    now = time.time()
-    if not _working_proxies or (now - _last_fetch_time) > PROXY_CACHE_TTL:
-        # Try loading from file cache first
-        try:
-            with open(PROXY_CACHE_FILE) as f:
-                data = json.load(f)
-                if (now - data.get("ts", 0)) < PROXY_CACHE_TTL and data.get("proxies"):
-                    _working_proxies = data["proxies"]
-                    _last_fetch_time = data["ts"]
-                    print(f"[PROXY] Loaded {len(_working_proxies)} proxies from cache file")
-        except Exception:
-            pass
-
+    # 3. Auto-fetch free proxies ONLY if explicitly enabled in env
+    if os.environ.get("AUTO_FETCH_FREE_PROXIES", "false").lower() in ("true", "1", "yes"):
+        now = time.time()
         if not _working_proxies or (now - _last_fetch_time) > PROXY_CACHE_TTL:
-            refresh_proxies()
+            try:
+                with open(PROXY_CACHE_FILE) as f:
+                    data = json.load(f)
+                    if (now - data.get("ts", 0)) < PROXY_CACHE_TTL and data.get("proxies"):
+                        _working_proxies = data["proxies"]
+                        _last_fetch_time = data["ts"]
+                        print(f"[PROXY] Loaded {len(_working_proxies)} proxies from cache file")
+            except Exception:
+                pass
 
-    if _working_proxies:
-        chosen = random.choice(_working_proxies)
-        return {
-            "http":  f"http://{chosen}",
-            "https": f"http://{chosen}",
-        }
+            if not _working_proxies or (now - _last_fetch_time) > PROXY_CACHE_TTL:
+                refresh_proxies()
+
+        if _working_proxies:
+            chosen = random.choice(_working_proxies)
+            return {
+                "http":  f"http://{chosen}",
+                "https": f"http://{chosen}",
+            }
 
     return None  # direct connection fallback
 

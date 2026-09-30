@@ -248,13 +248,21 @@ async def _trigger_download_pipeline(message: Message, session: AsyncSession, st
             }
         )
 
-        async with session.begin():
-            if success:
-                user.total_searches = (user.total_searches or 0) + 1
-            elif deduction_info and not is_admin and not has_sub:
-                # Auto-refund credit if download failed
-                await user_service.refund_deduction(user.telegram_user_id, deduction_info)
-                await message.answer("💰 <i>Your search credit has been automatically refunded due to an incomplete download.</i>", parse_mode="HTML")
+        from bot.database.session import async_session
+        async with async_session() as bg_session:
+            bg_user_service = UserService(bg_session)
+            bg_user = await bg_user_service.get_user_by_telegram_id(message.from_user.id)
+            if bg_user:
+                if success:
+                    bg_user.total_searches = (bg_user.total_searches or 0) + 1
+                    await bg_session.commit()
+                elif deduction_info and not is_admin and not has_sub:
+                    # Auto-refund credit if download failed
+                    await bg_user_service.refund_deduction(bg_user.telegram_user_id, deduction_info)
+                    try:
+                        await message.answer("💰 <i>Your search credit has been automatically refunded due to an incomplete download.</i>", parse_mode="HTML")
+                    except Exception:
+                        pass
 
     asyncio.create_task(_execute_job())
 
@@ -304,6 +312,8 @@ async def process_name_input(message: Message, session: AsyncSession, state: FSM
 # ── Dynamic Captcha & OTP Message Interceptor ────────────────────────────────
 
 def _is_aadhaar_input_active(message: Message) -> bool:
+    if not message.text or message.text.startswith("/"):
+        return False
     uid = message.from_user.id if message.from_user else 0
     return AadhaarService.is_user_waiting_input(uid) or AadhaarService.is_task_active(uid)
 
